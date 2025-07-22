@@ -6,7 +6,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Upload, FileText, Phone, Mail, User, AlertCircle } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+// Importer axios pour faire les appels API directement
+import axios from "axios";
 import { useToast } from "@/hooks/use-toast";
 
 const SAVForm = () => {
@@ -55,25 +56,26 @@ const SAVForm = () => {
   };
 
   const uploadFile = async (file: File): Promise<string | null> => {
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${Date.now()}.${fileExt}`;
+    // Pour l'instant, nous ne gérons pas le téléchargement de fichiers via API
+    // Une implémentation future devrait utiliser un endpoint Express pour le téléchargement
+    console.warn("Téléchargement de fichiers non implémenté dans l'API Express.");
+    return null;
     
-    const { error } = await supabase.storage
-      .from('sav-files')
-      .upload(fileName, file);
-
-    if (error) throw error;
-
-    const { data } = supabase.storage
-      .from('sav-files')
-      .getPublicUrl(fileName);
-
-    return data.publicUrl;
+    // Implémentation future :
+    // const formData = new FormData();
+    // formData.append('file', file);
+    // const response = await fetch('/api/upload', {
+    //   method: 'POST',
+    //   body: formData
+    // });
+    // const data = await response.json();
+    // return data.url;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
+    setErrorMessage(null);
 
     try {
       let fichierUrl = null;
@@ -82,14 +84,12 @@ const SAVForm = () => {
         fichierUrl = await uploadFile(selectedFile);
       }
 
-      const { error } = await supabase
-        .from('demandes_sav')
-        .insert({
-          ...formData,
-          fichier_url: fichierUrl
-        });
-
-      if (error) throw error;
+      // Utilisation de l'API Express via axios
+      await axios.post('/api/sav-claims', {
+        ...formData,
+        fichier_url: fichierUrl,
+        file_urls: fichierUrl ? [fichierUrl] : []
+      });
 
       toast({
         title: "Demande envoyée !",
