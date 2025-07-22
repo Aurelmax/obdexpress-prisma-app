@@ -1,0 +1,191 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Table des demandes de service après-vente
+model DemandesSav {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  nom            String
+  prenom         String
+  email          String
+  telephone      String
+  sujet          String
+  description    String
+  fichier_url    String?
+  statut         String   @default("nouveau")
+  assigne_a      String?  @db.Uuid
+  notes_internes String?
+  created_at     DateTime @default(now()) @db.Timestamptz()
+  updated_at     DateTime @default(now()) @db.Timestamptz()
+
+  @@map("demandes_sav")
+}
+
+// Table des informations sur les véhicules
+model VehicleInfo {
+  id                       String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  plate                    String   @unique
+  marque                   String?
+  modele                   String?
+  carrosserie              String?
+  couleur                  String?
+  energie                  String?
+  annee                    String?
+  puissance_fiscale        String?
+  puissance_din            String?
+  nombre_places            String?
+  date_mise_en_circulation String?
+  donnees_brutes           Json?
+  created_at               DateTime @default(now()) @db.Timestamptz()
+  updated_at               DateTime @default(now()) @db.Timestamptz()
+
+  @@index([plate])
+  @@map("vehicle_info")
+}
+
+// Table des villes pour le SEO programmatique
+model Ville {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  slug             String   @unique
+  nom              String
+  region           String
+  departement      String
+  code_postal      String
+  population       Int?
+  meta_title       String
+  meta_description String
+  introduction     String
+  avantages_locaux String[] // tableau de chaînes
+  prix_specifiques Json // JSONB dans PostgreSQL
+  points_interet   Json // JSONB dans PostgreSQL
+  latitude         Decimal? @db.Decimal(10, 8)
+  longitude        Decimal? @db.Decimal(11, 8)
+  visites          Int      @default(0)
+  conversions      Int      @default(0)
+  created_at       DateTime @default(now()) @db.Timestamptz()
+  updated_at       DateTime @default(now()) @db.Timestamptz()
+
+  // Relation avec CitySeodiagnostic
+  diagnostics CitySeodiagnostic[]
+
+  @@index([slug])
+  @@index([nom])
+  @@index([region])
+  @@index([departement])
+  @@map("villes")
+}
+
+// Table des diagnostics SEO pour les villes
+model CitySeodiagnostic {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ville_id    String   @db.Uuid
+  ville       Ville    @relation(fields: [ville_id], references: [id])
+  type        String
+  score       Int
+  details     Json?
+  suggestions String?
+  created_at  DateTime @default(now()) @db.Timestamptz()
+  updated_at  DateTime @default(now()) @db.Timestamptz()
+
+  @@index([ville_id])
+  @@map("city_seo_diagnostics")
+}
+
+// Table des réservations
+model Reservation {
+  id                   String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  nom                  String
+  prenom               String
+  email                String
+  telephone            String
+  adresse              String
+  ville                String
+  code_postal          String
+  marque               String
+  modele               String
+  annee                String?
+  immatriculation      String
+  type_diagnostic      String
+  commentaires         String?
+  date_reservation     DateTime @db.Timestamptz()
+  heure_reservation    String
+  prix                 Decimal  @db.Decimal(10, 2)
+  status               String   @default("pending")
+  payment_intent_id    String?
+  payment_status       String   @default("pending")
+  payment_method       String?
+  technician_id        String?  @db.Uuid
+  diagnostic_report_id String?  @db.Uuid
+  created_at           DateTime @default(now()) @db.Timestamptz()
+  updated_at           DateTime @default(now()) @db.Timestamptz()
+
+  @@index([email])
+  @@index([status])
+  @@index([payment_status])
+  @@index([date_reservation])
+  @@map("reservations")
+}
+
+// Table des disponibilités (créneaux horaires)
+model Disponibilite {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  date       DateTime @db.Date
+  heure      String
+  disponible Boolean  @default(true)
+  technicien String?  @db.Uuid
+  region     String?
+  created_at DateTime @default(now()) @db.Timestamptz()
+  updated_at DateTime @default(now()) @db.Timestamptz()
+
+  @@unique([date, heure, technicien])
+  @@index([date])
+  @@index([disponible])
+  @@map("disponibilites")
+}
+
+// Modèle utilisateur pour l'authentification
+model User {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email      String    @unique
+  name       String?
+  picture    String?
+  googleId   String?   @unique
+  role       Role      @default(USER)
+  created_at DateTime  @default(now()) @db.Timestamptz()
+  updated_at DateTime  @default(now()) @db.Timestamptz()
+  sessions   Session[]
+
+  @@map("users")
+}
+
+// Sessions utilisateur pour la gestion d'authentification
+model Session {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId     String   @db.Uuid
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token      String   @unique
+  expiresAt  DateTime @db.Timestamptz()
+  created_at DateTime @default(now()) @db.Timestamptz()
+  updated_at DateTime @default(now()) @db.Timestamptz()
+
+  @@map("sessions")
+}
+
+// Enum pour les rôles utilisateur
+enum Role {
+  USER
+  ADMIN
+  SUPER_ADMIN
+}
