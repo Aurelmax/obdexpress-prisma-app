@@ -8,7 +8,7 @@ import {
   DemandeSAV,
   Disponibilite,
   VehicleInfo
-} from '@/types/models';
+} from '../types/models';
 
 // Configurez l'instance d'Axios.
 // En développement, les appels à '/api' seront souvent gérés par un proxy (ex: dans vite.config.ts)
