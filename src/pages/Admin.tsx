@@ -5,18 +5,53 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar, Users, AlertCircle, BarChart3, Clock, CheckCircle, XCircle, Phone, Mail, MapPin } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import axios from "axios";
 import { useToast } from "@/hooks/use-toast";
-import { Tables } from "@/integrations/supabase/types";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 
-type Reservation = Tables<"reservations">;
-type DemandesSAV = Tables<"demandes_sav">;
+// Définitions des interfaces utilisateur
+interface Reservation {
+  id: string;
+  nom: string;
+  prenom: string;
+  email: string;
+  telephone: string;
+  adresse?: string;
+  ville?: string;
+  code_postal?: string;
+  marque_vehicule?: string;
+  modele_vehicule?: string;
+  annee_vehicule?: string;
+  numero_vin?: string;
+  type_prestation?: string;
+  date_rdv: string;
+  creneau_rdv?: string;
+  statut: 'en_attente' | 'confirmee' | 'annulee' | 'terminee';
+  created_at: string;
+  updated_at: string;
+  prix?: number;
+  notes?: string;
+}
+
+interface DemandeSAV {
+  id: string;
+  email: string;
+  nom?: string;
+  prenom?: string;
+  telephone?: string;
+  reservation_id?: string;
+  description: string;
+  sujet?: string;
+  file_urls?: string[];
+  statut: 'nouvelle' | 'en_cours' | 'resolue';
+  created_at: string;
+  updated_at?: string;
+}
 
 const Admin = () => {
   const [reservations, setReservations] = useState<Reservation[]>([]);
-  const [demandesSAV, setDemandesSAV] = useState<DemandesSAV[]>([]);
+  const [demandesSAV, setDemandesSAV] = useState<DemandeSAV[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
@@ -26,28 +61,20 @@ const Admin = () => {
 
   const loadData = async () => {
     try {
-      // Charger les réservations
-      const { data: reservationsData, error: reservationsError } = await supabase
-        .from('reservations')
-        .select('*')
-        .order('created_at', { ascending: false });
+      // Charger les réservations via l'API Express
+      const reservationsResponse = await axios.get('/api/reservations?sort=created_at&order=desc');
+      const reservationsData = reservationsResponse.data;
+      
+      // Charger les demandes SAV via l'API Express
+      const savResponse = await axios.get('/api/sav-claims?sort=created_at&order=desc');  
+      const savData = savResponse.data;
 
-      if (reservationsError) throw reservationsError;
-
-      // Charger les demandes SAV
-      const { data: savData, error: savError } = await supabase
-        .from('demandes_sav')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (savError) throw savError;
-
-      setReservations((reservationsData as any) || []);
-      setDemandesSAV(savData || []);
-    } catch (error) {
+      setReservations(reservationsData as Reservation[]);
+      setDemandesSAV(savData as DemandeSAV[]);
+    } catch (error: any) {
       toast({
         title: "Erreur",
-        description: "Impossible de charger les données",
+        description: `Impossible de charger les données: ${error.message}`,
         variant: "destructive"
       });
     } finally {
@@ -57,25 +84,27 @@ const Admin = () => {
 
   const updateReservationStatus = async (id: string, newStatus: string) => {
     try {
-      const { error } = await supabase
-        .from('reservations')
-        .update({ statut: newStatus })
-        .eq('id', id);
+      // Appel API pour mettre à jour le statut d'une réservation
+      await axios.put(`/api/reservations/${id}`, { 
+        statut: newStatus 
+      });
 
-      if (error) throw error;
-
+      // Mise à jour locale de l'état
       setReservations(prev => 
-        prev.map(r => r.id === id ? { ...r, statut: newStatus } : r)
+        prev.map(r => r.id === id ? { 
+          ...r, 
+          statut: newStatus as 'en_attente' | 'confirmee' | 'annulee' | 'terminee' 
+        } : r)
       );
 
       toast({
         title: "Statut mis à jour",
         description: "Le statut de la réservation a été modifié."
       });
-    } catch (error) {
+    } catch (error: any) {
       toast({
         title: "Erreur",
-        description: "Impossible de mettre à jour le statut",
+        description: `Impossible de mettre à jour le statut: ${error.message}`,
         variant: "destructive"
       });
     }
@@ -83,25 +112,27 @@ const Admin = () => {
 
   const updateSAVStatus = async (id: string, newStatus: string) => {
     try {
-      const { error } = await supabase
-        .from('demandes_sav')
-        .update({ statut: newStatus })
-        .eq('id', id);
+      // Appel API pour mettre à jour le statut d'une demande SAV
+      await axios.put(`/api/sav-claims/${id}`, { 
+        statut: newStatus 
+      });
 
-      if (error) throw error;
-
+      // Mise à jour locale de l'état
       setDemandesSAV(prev => 
-        prev.map(d => d.id === id ? { ...d, statut: newStatus } : d)
+        prev.map(d => d.id === id ? { 
+          ...d, 
+          statut: newStatus as 'nouvelle' | 'en_cours' | 'resolue' 
+        } : d)
       );
 
       toast({
         title: "Statut mis à jour",
         description: "Le statut de la demande SAV a été modifié."
       });
-    } catch (error) {
+    } catch (error: any) {
       toast({
         title: "Erreur",
-        description: "Impossible de mettre à jour le statut",
+        description: `Impossible de mettre à jour le statut: ${error.message}`,
         variant: "destructive"
       });
     }
@@ -125,7 +156,7 @@ const Admin = () => {
     totalReservations: reservations.length,
     reservationsEnAttente: reservations.filter(r => r.statut === 'en_attente').length,
     totalSAV: demandesSAV.length,
-    savEnCours: demandesSAV.filter(d => d.statut === 'nouveau' || d.statut === 'en_cours').length,
+    savEnCours: demandesSAV.filter(d => d.statut === 'nouvelle' || d.statut === 'en_cours').length,
   };
 
   if (loading) {
@@ -338,11 +369,11 @@ const Admin = () => {
                         <p className="mt-2">{demande.description}</p>
                       </div>
 
-                      {demande.fichier_url && (
+                      {demande.file_urls && demande.file_urls.length > 0 && (
                         <div className="p-3 border rounded-lg">
                           <p className="text-sm font-medium mb-2">Pièce jointe:</p>
                           <a 
-                            href={demande.fichier_url} 
+                            href={demande.file_urls[0]} 
                             target="_blank" 
                             rel="noopener noreferrer"
                             className="text-primary hover:underline"

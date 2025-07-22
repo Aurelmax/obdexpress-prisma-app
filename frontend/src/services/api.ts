@@ -7,7 +7,9 @@ import {
   DemandeSAVData,
   DemandeSAV,
   Disponibilite,
-  VehicleInfo
+  VehicleInfo,
+  User,
+  Session
 } from '../types/models';
 
 // Configurez l'instance d'Axios.
@@ -20,7 +22,31 @@ const apiClient = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true, // Important pour l'authentification basée sur les cookies
 });
+
+// --- Fonctions API pour l'authentification ---
+
+// Connexion avec email/mot de passe
+export const loginWithEmail = async (email: string, password: string): Promise<Session> => {
+  const response = await apiClient.post('/auth/login', { email, password });
+  return response.data;
+};
+
+// Récupérer la session courante
+export const getCurrentSession = async (): Promise<Session | null> => {
+  try {
+    const response = await apiClient.get('/auth/session');
+    return response.data;
+  } catch (error) {
+    return null;
+  }
+};
+
+// Déconnexion
+export const logout = async (): Promise<void> => {
+  await apiClient.post('/auth/logout');
+};
 
 // --- Fonctions API pour les Réservations ---
 

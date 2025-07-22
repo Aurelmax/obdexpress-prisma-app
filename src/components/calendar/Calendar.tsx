@@ -3,12 +3,21 @@ import { Calendar as BigCalendar, Views, momentLocalizer } from 'react-big-calen
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import moment from 'moment';
 import 'moment/locale/fr';
-import { supabase } from '@/integrations/supabase/client';
+import axios from 'axios';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Database } from '@/types/supabase';
-import { CalendarEvent } from '@/types/disponibilites';
+
+// Interface pour les événements du calendrier
+interface CalendarEvent {
+  id: string;
+  title: string;
+  start: Date;
+  end: Date;
+  status: 'disponible' | 'reserve' | 'bloque';
+  reservationId?: string;
+  notes?: string;
+}
 
 // Configurer le localizer pour le français
 moment.locale('fr');
@@ -42,19 +51,16 @@ const Calendar: React.FC<CalendarProps> = ({
       setError(null);
       
       try {
-        // Utiliser le client Supabase au lieu de fetch direct
-        let query = supabase
-          .from('disponibilites')
-          .select('*');
+        // Utiliser axios pour appeler l'API Express
+        const url = isAdmin 
+          ? '/api/disponibilites' 
+          : '/api/disponibilites?statut=disponible';
         
-        if (!isAdmin) {
-          query = query.eq('statut', 'disponible');
-        }
+        const response = await axios.get(url);
+        const data = response.data;
         
-        const { data, error } = await query;
-        
-        if (error) {
-          throw new Error(`Erreur Supabase: ${error.message}`);
+        if (!data) {
+          throw new Error('Aucune données reçues');
         }
         
         if (data && isMounted) {

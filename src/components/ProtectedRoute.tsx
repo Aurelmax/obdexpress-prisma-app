@@ -1,29 +1,30 @@
 import { useState, useEffect } from "react";
 import { Navigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+import { getCurrentSession } from "../../frontend/src/services/api";
+import { Session } from "../../frontend/src/types/models";
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
 }
 
 const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
-  const [session, setSession] = useState<any>(null);
+  const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Vérifier la session actuelle
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setLoading(false);
-    });
-
-    // Écouter les changements d'authentification
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      setLoading(false);
-    });
-
-    return () => subscription.unsubscribe();
+    // Vérifier la session actuelle avec l'API Express
+    const checkSession = async () => {
+      try {
+        const currentSession = await getCurrentSession();
+        setSession(currentSession);
+      } catch (error) {
+        setSession(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    checkSession();
   }, []);
 
   if (loading) {

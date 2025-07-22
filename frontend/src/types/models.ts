@@ -146,3 +146,20 @@ export interface VehicleInfo {
   year: number;
   // ... autres infos utiles
 }
+
+// --- Types pour l'authentification ---
+export interface User {
+  id: string;
+  email: string;
+  role: 'admin' | 'technicien' | 'utilisateur';
+  nom?: string;
+  prenom?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface Session {
+  user: User;
+  token?: string;
+  expires_at?: string;
+}

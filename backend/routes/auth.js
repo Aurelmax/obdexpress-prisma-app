@@ -1,11 +1,131 @@
 import express from 'express';
 import jwt from 'jsonwebtoken';
+import bcrypt from 'bcryptjs';
 import { OAuth2Client } from 'google-auth-library';
 import prisma from '../utils/prisma.js';
 import { verifyToken, refreshToken } from '../middleware/auth.js';
 
 const router = express.Router();
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+
+/**
+ * Authentification avec email/mot de passe
+ * @route POST /api/auth/login
+ * @access Public
+ */
+router.post('/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    
+    if (!email || !password) {
+      return res.status(400).json({ message: 'Email et mot de passe requis.' });
+    }
+    
+    // Rechercher l'utilisateur par email
+    const user = await prisma.user.findUnique({ where: { email } });
+    
+    if (!user || !user.password) {
+      return res.status(401).json({ message: 'Email ou mot de passe incorrect.' });
+    }
+    
+    // Vérifier le mot de passe
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    
+    if (!isPasswordValid) {
+      return res.status(401).json({ message: 'Email ou mot de passe incorrect.' });
+    }
+    
+    // Créer une session pour l'utilisateur
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7); // Session de 7 jours
+    
+    // Créer un JWT pour l'utilisateur
+    const jwtToken = jwt.sign(
+      { userId: user.id, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+    
+    // Enregistrer la session en base de données
+    const session = await prisma.session.create({
+      data: {
+        userId: user.id,
+        token: jwtToken,
+        expiresAt
+      }
+    });
+    
+    // Définir un cookie HTTP-only
+    res.cookie('token', jwtToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 jours en millisecondes
+    });
+    
+    // Renvoyer les informations utilisateur (sans données sensibles)
+    return res.status(200).json({
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name || null,
+        picture: user.picture || null,
+        role: user.role
+      }
+    });
+  } catch (error) {
+    console.error('Erreur lors de la connexion:', error);
+    return res.status(500).json({ message: 'Erreur lors de la connexion.' });
+  }
+});
+
+/**
+ * Vérifier et retourner la session actuelle
+ * @route GET /api/auth/session
+ * @access Public
+ */
+router.get('/session', async (req, res) => {
+  try {
+    const token = req.cookies.token || 
+                 (req.headers.authorization && req.headers.authorization.split(' ')[1]);
+    
+    if (!token) {
+      return res.status(200).json(null);
+    }
+    
+    // Vérifier le jeton
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      
+      // Vérifier si la session existe toujours en base de données
+      const session = await prisma.session.findUnique({
+        where: { token },
+        include: { user: true }
+      });
+      
+      if (!session || new Date(session.expiresAt) < new Date()) {
+        return res.status(200).json(null);
+      }
+      
+      // Renvoyer les informations utilisateur
+      return res.status(200).json({
+        user: {
+          id: session.user.id,
+          email: session.user.email,
+          name: session.user.name,
+          picture: session.user.picture,
+          role: session.user.role
+        }
+      });
+    } catch (error) {
+      // Token invalide
+      return res.status(200).json(null);
+    }
+  } catch (error) {
+    console.error('Erreur lors de la vérification de session:', error);
+    return res.status(500).json({ message: 'Erreur serveur.' });
+  }
+});
 
 /**
  * Authentification avec Google OAuth

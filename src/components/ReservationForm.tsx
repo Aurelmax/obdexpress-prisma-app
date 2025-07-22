@@ -9,7 +9,7 @@ import { MapPin, User, Car, Phone, Mail } from "lucide-react";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import { cn } from "@/lib/utils";
-import { supabase } from "@/integrations/supabase/client";
+import axios from "axios";
 import { useToast } from "@/hooks/use-toast";
 import TimeSlotSelector from "@/components/calendar/TimeSlotSelector";
 import VehicleSelector from "@/components/VehicleSelector";
@@ -61,30 +61,25 @@ const ReservationForm = () => {
         throw new Error("Veuillez sélectionner un créneau de rendez-vous disponible");
       }
       
-      // Étape 1 : Insérer la réservation
-      // Utilisation d'une assertion de type pour inclure le champ 'prix'
-      const { data: reservationData, error: reservationError } = await supabase
-        .from('reservations')
-        .insert({
-          ...formData,
-          annee_vehicule: parseInt(formData.annee_vehicule),
-          prix: selectedPrestation?.price || 0,
-          date_rdv: selectedStartDate.toISOString()
-        } as any) // Assertion de type pour éviter l'erreur sur 'prix'
-        .select();
+      // Étape 1 : Insérer la réservation via l'API Express
+      const reservationResponse = await axios.post('/api/reservations', {
+        ...formData,
+        annee_vehicule: parseInt(formData.annee_vehicule),
+        prix: selectedPrestation?.price || 0,
+        date_rdv: selectedStartDate.toISOString()
+      });
         
-      if (reservationError) throw reservationError;
+      const reservationData = reservationResponse.data;
+      
+      if (!reservationData || !reservationData.id) {
+        throw new Error("Erreur lors de la création de la réservation");
+      }
       
       // Étape 2 : Mettre à jour le créneau pour le marquer comme réservé
-      const { error: updateError } = await supabase
-        .from('disponibilites')
-        .update({
-          statut: 'reserve',
-          reservation_id: reservationData?.[0]?.id
-        })
-        .eq('id', selectedSlotId);
-        
-      if (updateError) throw updateError;
+      await axios.put(`/api/disponibilites/${selectedSlotId}`, {
+        statut: 'reserve',
+        reservation_id: reservationData.id
+      });
 
       // Erreur déjà vérifiée (reservationError et updateError)
 

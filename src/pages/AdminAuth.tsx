@@ -4,9 +4,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Car, Shield, Eye, EyeOff } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
+import { loginWithEmail, getCurrentSession } from "../../frontend/src/services/api";
+import { Session } from "../../frontend/src/types/models";
 
 const AdminAuth = () => {
   const [email, setEmail] = useState("");
@@ -19,22 +20,15 @@ const AdminAuth = () => {
 
   useEffect(() => {
     // Vérifier si l'utilisateur est déjà connecté
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    const checkSession = async () => {
+      const session = await getCurrentSession();
       setSession(session);
       if (session) {
         navigate('/admin');
       }
-    });
-
-    // Écouter les changements d'état d'authentification
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      if (session) {
-        navigate('/admin');
-      }
-    });
-
-    return () => subscription.unsubscribe();
+    };
+    
+    checkSession();
   }, [navigate]);
 
   const handleSignIn = async (e: React.FormEvent) => {
@@ -42,23 +36,20 @@ const AdminAuth = () => {
     setIsLoading(true);
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      if (error) throw error;
-
+      // Utiliser notre nouvelle API Express au lieu de Supabase
+      const session = await loginWithEmail(email, password);
+      setSession(session);
+      
       toast({
         title: "Connexion réussie",
         description: "Redirection vers le back office...",
       });
-
-      // La redirection sera gérée par useEffect
+      
+      navigate('/admin');
     } catch (error: any) {
       toast({
         title: "Erreur de connexion",
-        description: error.message || "Identifiants incorrects",
+        description: error.response?.data?.message || "Identifiants incorrects",
         variant: "destructive"
       });
     } finally {

@@ -1,8 +1,40 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
-import { supabase } from '@/integrations/supabase/client';
-import type { Ville } from '@/integrations/supabase/types/villes';
+import axios from 'axios';
+
+// Définition locale du type Ville
+interface Ville {
+  id: string;
+  nom: string;
+  slug: string;
+  description: string;
+  image_url?: string;
+  latitude?: number;
+  longitude?: number;
+  departement?: string;
+  code_postal?: string;
+  visites?: number;
+  created_at?: string;
+  updated_at?: string;
+  meta_title?: string;
+  meta_description?: string;
+  region?: string;
+  introduction?: string;
+  avantages_locaux?: string[];
+  points_interet?: {
+    garages_partenaires?: string[];
+    zone_intervention?: string;
+    [key: string]: any;
+  };
+  prix_specifiques?: {
+    diagnostic_standard?: number;
+    diagnostic_electronique?: number;
+    inspection_pre_achat?: number;
+    depannage_domicile?: number;
+    [key: string]: number | undefined;
+  };
+}
 
 const VilleDetail = () => {
   const { slug } = useParams<{ slug: string }>();
@@ -17,20 +49,9 @@ const VilleDetail = () => {
       if (!slug) return;
 
       try {
-        const { data, error } = await supabase
-          .from('villes')
-          .select('*')
-          .eq('slug', slug)
-          .single();
-
-        if (error) {
-          if (error.code === 'PGRST116') {
-            // Ville non trouvée
-            navigate('/villes', { replace: true });
-            return;
-          }
-          throw new Error(error.message);
-        }
+        // Récupérer les détails de la ville par son slug
+        const response = await axios.get(`/api/villes/${slug}`);
+        const data = response.data;
 
         if (!data) {
           navigate('/villes', { replace: true });
@@ -40,10 +61,7 @@ const VilleDetail = () => {
         setVille(data as Ville);
         
         // Incrémenter le compteur de visites
-        await supabase
-          .from('villes')
-          .update({ visites: (data.visites || 0) + 1 })
-          .eq('id', data.id);
+        await axios.put(`/api/villes/${data.id}/increment-visites`);
           
         setLoading(false);
       } catch (err) {

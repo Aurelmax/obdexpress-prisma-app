@@ -1,8 +1,26 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
-import { supabase } from '@/integrations/supabase/client';
-import type { Ville } from '@/integrations/supabase/types/villes';
+import axios from 'axios';
+
+// Définition locale du type Ville
+interface Ville {
+  id: string;
+  nom: string;
+  slug: string;
+  description: string;
+  image_url?: string;
+  departement?: string;
+  code_postal?: string;
+  visites?: number;
+  prix_specifiques: {
+    diagnostic_standard: number;
+    diagnostic_electronique?: number;
+    inspection_pre_achat?: number;
+    depannage_domicile?: number;
+    [key: string]: number | undefined;
+  };
+}
 
 const VillesIndex = () => {
   const [villes, setVilles] = useState<Ville[]>([]);
@@ -13,15 +31,10 @@ const VillesIndex = () => {
   useEffect(() => {
     const fetchVilles = async () => {
       try {
-        const { data, error } = await supabase
-          .from('villes')
-          .select('*')
-          .order('nom', { ascending: true });
-
-        if (error) {
-          throw new Error(error.message);
-        }
-
+        // Utilisation d'axios pour appeler l'API Express
+        const response = await axios.get('/api/villes');
+        const data = response.data;
+        
         setVilles(data as Ville[]);
         setLoading(false);
       } catch (err) {
