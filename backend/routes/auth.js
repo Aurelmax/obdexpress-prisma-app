@@ -1,7 +1,7 @@
 import express from 'express';
 import jwt from 'jsonwebtoken';
 import { OAuth2Client } from 'google-auth-library';
-import { prisma } from '../server.js';
+import prisma from '../utils/prisma.js';
 import { verifyToken, refreshToken } from '../middleware/auth.js';
 
 const router = express.Router();

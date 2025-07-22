@@ -1,0 +1,167 @@
+// This is your Prisma schema file
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Modèles de données pour OBDExpress
+
+// Utilisateurs
+model User {
+  id               String        @id @default(uuid())
+  email            String        @unique
+  nom              String?
+  prenom           String?
+  telephone        String?
+  role             Role          @default(CLIENT)
+  created_at       DateTime      @default(now())
+  updated_at       DateTime      @updatedAt
+  reservations     Reservation[]
+  demandes_sav     DemandeSAV[]
+  disponibilites   Disponibilite[] @relation("technicien_disponibilites")
+}
+
+enum Role {
+  ADMIN
+  TECHNICIEN
+  CLIENT
+}
+
+// Réservations
+model Reservation {
+  id               String        @id @default(uuid())
+  nom              String
+  prenom           String
+  email            String
+  telephone        String
+  adresse          String?
+  ville            String?
+  code_postal      String?
+  marque           String
+  modele           String
+  annee            Int?
+  immatriculation  String?
+  date_rdv         DateTime
+  creneau_rdv      String
+  service          String
+  message          String?
+  statut           StatutReservation @default(EN_ATTENTE)
+  prix             Float?
+  marque_vehicule  String?
+  modele_vehicule  String?
+  annee_vehicule   String?
+  numero_vin       String?
+  type_prestation  String?
+  notes            String?
+  created_at       DateTime     @default(now())
+  updated_at       DateTime     @updatedAt
+  user_id          String?
+  user             User?        @relation(fields: [user_id], references: [id])
+  disponibilite_id String?      @unique
+  disponibilite    Disponibilite? @relation(fields: [disponibilite_id], references: [id])
+  demandes_sav     DemandeSAV[]
+}
+
+enum StatutReservation {
+  EN_ATTENTE
+  CONFIRMEE
+  ANNULEE
+  TERMINEE
+  CONFIRME
+  TERMINE
+  NOUVELLE
+}
+
+// Demandes SAV
+model DemandeSAV {
+  id               String       @id @default(uuid())
+  email            String
+  nom              String?
+  prenom           String?
+  telephone        String?
+  sujet            String?
+  description      String
+  file_urls        String[]     // Stocke les URLs des fichiers sous forme de tableau
+  fichier_url      String?      // Champ legacy pour compatibilité
+  statut           StatutSAV    @default(NOUVEAU)
+  created_at       DateTime     @default(now())
+  updated_at       DateTime     @updatedAt
+  reservation_id   String?
+  reservation      Reservation? @relation(fields: [reservation_id], references: [id])
+  user_id          String?
+  user             User?        @relation(fields: [user_id], references: [id])
+}
+
+enum StatutSAV {
+  NOUVEAU
+  EN_COURS
+  RESOLU
+  NOUVELLE
+  RESOLUE
+}
+
+// Villes
+model Ville {
+  id                String           @id @default(uuid())
+  nom               String
+  slug              String           @unique
+  region            String?
+  departement       String?
+  code_postal       String?
+  prix_specifiques  Json            // Stocké comme JSON pour flexibilité
+  meta_title        String
+  meta_description  String
+  introduction      String
+  avantages_locaux  String[]       // Stocke les avantages sous forme de tableau
+  points_interet    Json            // Stocké comme JSON pour les données complexes
+  visites           Int             @default(0)
+  created_at        DateTime        @default(now())
+  updated_at        DateTime        @updatedAt
+  disponibilites    Disponibilite[] // Relation avec les créneaux disponibles
+}
+
+// Disponibilités/Créneaux
+model Disponibilite {
+  id             String              @id @default(uuid())
+  date           DateTime
+  creneau        String             // Format "HH:MM-HH:MM"
+  statut         StatutDisponibilite @default(DISPONIBLE)
+  date_debut     DateTime           // Pour compatibilité avec Calendar
+  date_fin       DateTime           // Pour compatibilité avec Calendar
+  notes          String?
+  technicien_id  String?
+  technicien     User?              @relation("technicien_disponibilites", fields: [technicien_id], references: [id], onDelete: SetNull)
+  ville_id       String?
+  ville          Ville?             @relation(fields: [ville_id], references: [id], onDelete: SetNull)
+  reservation    Reservation?
+  created_at     DateTime           @default(now())
+  updated_at     DateTime           @updatedAt
+}
+
+enum StatutDisponibilite {
+  DISPONIBLE
+  INDISPONIBLE
+  RESERVE
+  BLOQUE
+}
+
+// Informations Véhicule (optionnel pour plus tard)
+model VehicleInfo {
+  id             String   @id @default(uuid())
+  vin            String   @unique
+  marque         String
+  modele         String
+  annee          Int
+  moteur         String?
+  carburant      String?
+  transmission   String?
+  historique     Json?
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+}

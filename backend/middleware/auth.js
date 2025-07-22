@@ -1,5 +1,5 @@
 import jwt from 'jsonwebtoken';
-import { prisma } from '../server.js';
+import prisma from '../utils/prisma.js';
 
 /**
  * Middleware pour vérifier le jeton d'authentification

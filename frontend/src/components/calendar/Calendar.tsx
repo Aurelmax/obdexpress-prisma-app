@@ -3,12 +3,11 @@ import { Calendar as BigCalendar, Views, momentLocalizer } from 'react-big-calen
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import moment from 'moment';
 import 'moment/locale/fr';
-import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Database } from '@/types/supabase';
-import { CalendarEvent } from '@/types/disponibilites';
+import { CalendarEvent, Disponibilite, DisponibiliteStatut } from '@/types/models';
+import { getAvailableTimeSlots } from '@/services/api';
 
 // Configurer le localizer pour le français
 moment.locale('fr');
@@ -34,7 +33,7 @@ const Calendar: React.FC<CalendarProps> = ({
   // Mémoriser le localizer pour éviter les re-rendus inutiles
   const memoizedLocalizer = useMemo(() => localizer, []);
 
-  // Charger les disponibilités depuis Supabase
+  // Charger les disponibilités depuis notre API
   useEffect(() => {
     let isMounted = true;
     const fetchDisponibilites = async () => {
@@ -42,44 +41,51 @@ const Calendar: React.FC<CalendarProps> = ({
       setError(null);
       
       try {
-        // Utiliser le client Supabase au lieu de fetch direct
-        const query = supabase
-          .from('disponibilites')
-          .select('*')
-          .order('date_debut', { ascending: true });
+        // Utiliser notre service API au lieu de Supabase
+        let disponibilites = await getAvailableTimeSlots();
         
         // Filtrer par disponibilité si non admin
         if (!isAdmin) {
-          query.eq('statut', 'disponible');
+          disponibilites = disponibilites.filter(dispo => dispo.statut === 'disponible');
         }
         
-        const { data, error } = await query;
-        
-        if (error) {
-          console.error('Erreur Supabase:', error);
-          throw error;
-        }
-        
-        if (data && isMounted) {
+        if (isMounted) {
           try {
-            // Mapper les disponibilités en événements de calendrier
-            const calendarEvents: CalendarEvent[] = data.map((dispo: any) => ({
-              id: dispo.id,
-              title: dispo.statut === 'disponible' ? 'Disponible' : 
-                    dispo.statut === 'reserve' ? 'Réservé' : 'Bloqué',
-              start: new Date(dispo.date_debut),
-              end: new Date(dispo.date_fin),
-              status: dispo.statut,
-              reservationId: dispo.reservation_id || undefined,
-              notes: dispo.notes || undefined
-            }));
+            const calendarEvents: CalendarEvent[] = disponibilites.map((dispo: Disponibilite) => {
+              let start, end;
+              
+              if (dispo.date_debut && dispo.date_fin) {
+                start = new Date(dispo.date_debut);
+                end = new Date(dispo.date_fin);
+              } else {
+                const [startTime, endTime] = dispo.creneau.split('-');
+                const [startHour, startMinute] = startTime.split(':').map(Number);
+                const [endHour, endMinute] = endTime.split(':').map(Number);
+                
+                start = new Date(dispo.date);
+                start.setHours(startHour, startMinute, 0);
+                
+                end = new Date(dispo.date);
+                end.setHours(endHour, endMinute, 0);
+              }
+              
+              return {
+                id: dispo.id,
+                title: dispo.statut === 'disponible' ? 'Disponible' : 
+                       dispo.statut === 'reserve' ? 'Réservé' : 
+                       dispo.statut === 'indisponible' ? 'Indisponible' : 'Bloqué',
+                start,
+                end,
+                status: dispo.statut,
+                reservationId: dispo.reservation_id || undefined,
+                notes: dispo.notes || undefined
+              };
+            });
             
             console.log('Disponibilités chargées:', calendarEvents.length, calendarEvents);
             
-            // Si aucun créneau n'est disponible, générer des créneaux démo pour tester
             if (calendarEvents.length === 0) {
               console.log('Aucun créneau disponible, génération de créneaux de test');
-              // Ajouter quelques événements de démo pour les tests
               const today = new Date();
               const tomorrow = new Date(today);
               tomorrow.setDate(today.getDate() + 1);
@@ -89,7 +95,7 @@ const Calendar: React.FC<CalendarProps> = ({
                 title: 'Disponible (Démo)',
                 start: new Date(tomorrow.setHours(10, 0, 0)),
                 end: new Date(tomorrow.setHours(12, 0, 0)),
-                status: 'disponible'
+                status: 'disponible' as DisponibiliteStatut
               });
               
               const dayAfterTomorrow = new Date(today);
@@ -100,14 +106,19 @@ const Calendar: React.FC<CalendarProps> = ({
                 title: 'Disponible (Démo)',
                 start: new Date(dayAfterTomorrow.setHours(14, 0, 0)),
                 end: new Date(dayAfterTomorrow.setHours(16, 0, 0)),
-                status: 'disponible'
+                status: 'disponible' as DisponibiliteStatut
               });
             }
             
             setEvents(calendarEvents);
-          } catch (mapError) {
-            console.error('Erreur lors de la conversion des données:', mapError);
-            setError('Format de données incorrect');
+          } catch (err) {
+            console.error('Erreur de traitement:', err);
+            setError('Erreur lors du traitement des disponibilités.');
+            toast({
+              title: "Erreur",
+              description: "Problème lors du traitement des disponibilités.",
+              variant: "destructive"
+            });
           }
         }
       } catch (error: any) {

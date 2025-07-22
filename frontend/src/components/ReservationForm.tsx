@@ -9,22 +9,17 @@ import GoogleAddressAutocomplete from "./GoogleAddressAutocomplete";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import { cn } from "@/lib/utils";
-import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import TimeSlotSelector from "@/components/calendar/TimeSlotSelector";
 import VehicleSelector from "@/components/VehicleSelector";
 
+// Import du service API et des types
+import { fetchVilles, createReservation, reverseGeocode, getUserLocation } from "@/services/api";
+import { Ville as VilleData, PreReservationData } from "@/types/models";
+
 // Interface pour les prix spécifiques par ville
 interface PrixSpecifiques {
   [ville: string]: number;
-}
-
-// Type générique pour les données de villes provenant de Supabase
-type VilleData = {
-  id: string | number;
-  nom: string;
-  code_postal: string;
-  prix_specifiques: any; // Utiliser 'any' pour éviter les problèmes de typage avec JSON Supabase
 }
 
 const ReservationForm = () => {
@@ -57,21 +52,12 @@ const ReservationForm = () => {
   useEffect(() => {
     const fetchVillesData = async () => {
       try {
-        const { data, error } = await supabase
-          .from('villes')
-          .select('id, nom, code_postal, prix_specifiques');
+        // Utilisation de la fonction fetchVilles du service API
+        const villesData = await fetchVilles();
         
-        if (error) throw error;
-        if (data) {
-          // Conversion explicite pour assurer la compatibilité de type
-          const typedData: VilleData[] = data.map(item => ({
-            id: item.id,
-            nom: item.nom,
-            code_postal: item.code_postal,
-            prix_specifiques: item.prix_specifiques
-          }));
-          setVillesData(typedData);
-        }
+        // Définition des prix spécifiques si nécessaire
+        // (adaptation selon le format retourné par votre API Express)
+        setVillesData(villesData);
       } catch (error) {
         console.error('Erreur lors du chargement des villes:', error);
       }
@@ -79,55 +65,50 @@ const ReservationForm = () => {
     
     fetchVillesData();
     // Essayer d'obtenir la géolocalisation au chargement
-    getUserLocation();
+    handleGetUserLocation();
   }, []);
   
   // Fonction pour obtenir la localisation de l'utilisateur
-  const getUserLocation = () => {
-    if (navigator.geolocation) {
-      setIsGeolocationLoading(true);
-      navigator.geolocation.getCurrentPosition(
-        async (position) => {
-          try {
-            // Utiliser une API de géocodage inverse pour obtenir l'adresse
-            const response = await fetch(
-              `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${position.coords.latitude}&longitude=${position.coords.longitude}&localityLanguage=fr`
-            );
-            const data = await response.json();
-            
-            // Remplir l'adresse et la ville automatiquement
-            const ville = data.locality || data.city || '';
-            const codePostal = data.postcode || '';
-            
-            setFormData(prev => ({
-              ...prev,
-              ville,
-              // Conserver le code postal existant s'il est déjà rempli et que l'API ne renvoie pas de valeur
-              code_postal: codePostal || prev.code_postal || '',
-              // Ne pas pré-remplir l'adresse d'intervention avec les informations régionales
-              // L'utilisateur doit saisir l'adresse exacte d'intervention
-              // adresse: data.principalSubdivision ? `${data.principalSubdivision}, ${ville}` : ville
-            }));
-            
-            // Calculer le prix basé sur la ville
-            updatePriceBasedOnLocation(ville);
-          } catch (error) {
-            console.error("Erreur lors de la récupération de l'adresse:", error);
-          } finally {
-            setIsGeolocationLoading(false);
-          }
-        },
-        (error) => {
-          console.error("Erreur de géolocalisation:", error);
+  const handleGetUserLocation = () => {
+    setIsGeolocationLoading(true);
+    
+    // Utilisation des fonctions du service API
+    getUserLocation()
+      .then(async (position) => {
+        try {
+          // Utiliser notre service API pour le géocodage inverse
+          const data = await reverseGeocode(position.coords.latitude, position.coords.longitude);
+          
+          // Remplir l'adresse et la ville automatiquement
+          const ville = data.locality || data.city || '';
+          const codePostal = data.postcode || '';
+          
+          setFormData(prev => ({
+            ...prev,
+            ville,
+            // Conserver le code postal existant s'il est déjà rempli et que l'API ne renvoie pas de valeur
+            code_postal: codePostal || prev.code_postal || '',
+            // Ne pas pré-remplir l'adresse d'intervention avec les informations régionales
+            // L'utilisateur doit saisir l'adresse exacte d'intervention
+          }));
+          
+          // Calculer le prix basé sur la ville
+          updatePriceBasedOnLocation(ville);
+        } catch (error) {
+          console.error("Erreur lors de la récupération de l'adresse:", error);
+        } finally {
           setIsGeolocationLoading(false);
-          toast({
-            title: "Géolocalisation non disponible",
-            description: "Veuillez saisir votre adresse manuellement.",
-            variant: "destructive"
-          });
         }
-      );
-    }
+      })
+      .catch((error) => {
+        console.error("Erreur de géolocalisation:", error);
+        setIsGeolocationLoading(false);
+        toast({
+          title: "Géolocalisation non disponible",
+          description: "Veuillez saisir votre adresse manuellement.",
+          variant: "destructive"
+        });
+      });
   };
   
   // Mettre à jour le prix en fonction de la localisation
@@ -221,48 +202,36 @@ const ReservationForm = () => {
       console.log('Corps de la requête JSON:', JSON.stringify(requestBody, null, 2));
       
       try {
-        const response = await fetch(
-          `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/rpc/create_reservation`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
-              'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-              'Prefer': 'return=representation'
-            },
-            body: JSON.stringify(requestBody)
-          }
-        );
+        // Transformation des données pour correspondre au format attendu par l'API
+        const reservationData: PreReservationData = {
+          nom: formData.nom,
+          prenom: formData.prenom,
+          email: formData.email,
+          telephone: formData.telephone,
+          adresse: formData.adresse || '',
+          ville: formData.ville,
+          code_postal: formData.code_postal || '',
+          marque: formData.marque_vehicule,
+          modele: formData.modele_vehicule,
+          annee: formData.annee_vehicule ? parseInt(formData.annee_vehicule) : new Date().getFullYear(),
+          immatriculation: formData.numero_vin || '',
+          date_rdv: selectedStartDate ? format(selectedStartDate, 'yyyy-MM-dd') : '',
+          creneau_rdv: selectedStartDate && selectedEndDate ? 
+            `${format(selectedStartDate, 'HH:mm')}-${format(selectedEndDate, 'HH:mm')}` : '',
+          service: 'essentiel',
+          message: formData.notes || ''
+        };
         
-        console.log('Réponse de l\'API:', {
-          status: response.status,
-          statusText: response.statusText,
-          headers: Object.fromEntries([...response.headers])
-        });
-
-        const responseText = await response.text();
-        console.log('Corps de la réponse:', responseText);
+        console.log('Envoi de la réservation avec les données:', reservationData);
         
-        if (!response.ok) {
-          throw new Error(`Erreur ${response.status}: ${responseText}`);
-        }
+        // Utilisation de la fonction du service API
+        const response = await createReservation(reservationData);
+        console.log('Réponse de l\'API:', response);
         
-        // Parse la réponse JSON si elle existe
-        let reservationData;
-        try {
-          if (responseText) {
-            reservationData = JSON.parse(responseText);
-          }
-        } catch (parseError) {
-          console.error('Erreur lors du parsing de la réponse JSON:', parseError);
-          throw new Error('Format de réponse invalide');
-        }
-        
-        console.log('Réservation créée avec succès:', reservationData);
+        console.log('Réservation créée avec succès:', response);
         
         // Récupérer l'ID de réservation depuis la réponse JSON si disponible
-        const reservationId = reservationData?.reservation_id;
+        const reservationId = response?.id;
         console.log('Réservation complète terminée avec succès. ID réservation:', reservationId || 'Non retourné');
         
         console.log('=== FIN DU PROCESSUS DE RÉSERVATION - SUCCÈS ===');

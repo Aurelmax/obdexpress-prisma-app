@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
-import { supabase } from '@/integrations/supabase/client';
-import type { Ville } from '@/integrations/supabase/types/villes';
+import { fetchVilles } from '@/services/api';
+import type { Ville } from '@/types/models';
 
 const VillesIndex = () => {
   const [villes, setVilles] = useState<Ville[]>([]);
@@ -11,18 +11,15 @@ const VillesIndex = () => {
   const siteUrl = import.meta.env.VITE_PUBLIC_SITE_URL || window.location.origin;
 
   useEffect(() => {
-    const fetchVilles = async () => {
+    const loadVilles = async () => {
       try {
-        const { data, error } = await supabase
-          .from('villes')
-          .select('*')
-          .order('nom', { ascending: true });
-
-        if (error) {
-          throw new Error(error.message);
-        }
-
-        setVilles(data as Ville[]);
+        // Utiliser le service API au lieu de Supabase
+        const data = await fetchVilles();
+        
+        // Trier les villes par nom si nécessaire (au cas où l'API ne les renvoie pas déjà triées)
+        const sortedVilles = [...data].sort((a, b) => a.nom.localeCompare(b.nom));
+        
+        setVilles(sortedVilles);
         setLoading(false);
       } catch (err) {
         console.error('Erreur lors de la récupération des villes:', err);
@@ -31,7 +28,7 @@ const VillesIndex = () => {
       }
     };
 
-    fetchVilles();
+    loadVilles();
   }, []);
 
   if (loading) {

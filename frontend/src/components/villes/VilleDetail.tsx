@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
-import { supabase } from '@/integrations/supabase/client';
-import type { Ville } from '@/integrations/supabase/types/villes';
+import { fetchVilleBySlug, incrementVilleVisites } from '@/services/api';
+import type { Ville } from '@/types/models';
 
 const VilleDetail = () => {
   const { slug } = useParams<{ slug: string }>();
@@ -13,47 +13,45 @@ const VilleDetail = () => {
   const siteUrl = import.meta.env.VITE_PUBLIC_SITE_URL || window.location.origin;
 
   useEffect(() => {
-    const fetchVilleDetails = async () => {
+    const loadVilleDetails = async () => {
       if (!slug) return;
 
       try {
-        const { data, error } = await supabase
-          .from('villes')
-          .select('*')
-          .eq('slug', slug)
-          .single();
-
-        if (error) {
-          if (error.code === 'PGRST116') {
-            // Ville non trouvée
-            navigate('/villes', { replace: true });
-            return;
-          }
-          throw new Error(error.message);
-        }
-
-        if (!data) {
+        // Utiliser le service API au lieu de Supabase
+        const villeData = await fetchVilleBySlug(slug);
+        
+        if (!villeData) {
           navigate('/villes', { replace: true });
           return;
         }
 
-        setVille(data as Ville);
+        setVille(villeData);
         
-        // Incrémenter le compteur de visites
-        await supabase
-          .from('villes')
-          .update({ visites: (data.visites || 0) + 1 })
-          .eq('id', data.id);
+        // Incrémenter le compteur de visites via l'API
+        try {
+          await incrementVilleVisites(villeData.id);
+        } catch (visitError) {
+          // En cas d'erreur sur l'incrémentation, on continue quand même
+          // car ce n'est pas critique pour l'affichage de la page
+          console.warn('Impossible d\'incrémenter le compteur de visites:', visitError);
+        }
           
         setLoading(false);
       } catch (err) {
         console.error(`Erreur lors de la récupération des détails pour ${slug}:`, err);
+        
+        // Vérifier si c'est une erreur 404 (ville non trouvée)
+        if (err.response && err.response.status === 404) {
+          navigate('/villes', { replace: true });
+          return;
+        }
+        
         setError('Une erreur est survenue lors du chargement des informations. Veuillez réessayer plus tard.');
         setLoading(false);
       }
     };
 
-    fetchVilleDetails();
+    loadVilleDetails();
   }, [slug, navigate]);
 
   if (loading) {

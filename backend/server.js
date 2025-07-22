@@ -3,15 +3,22 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import morgan from 'morgan';
-import { PrismaClient } from '../generated/prisma/index.js';
 import dotenv from 'dotenv';
+
+// Import des routes et middlewares
 import authRoutes from './routes/auth.js';
+import villesRoutes from './routes/villesRoutes.js';
+import reservationsRoutes from './routes/reservationsRoutes.js';
+import disponibilitesRoutes from './routes/disponibilitesRoutes.js';
+import savClaimsRoutes from './routes/savClaimsRoutes.js';
 import { verifyToken } from './middleware/auth.js';
+
+// Import du client Prisma singleton
+import prisma from './utils/prisma.js';
 
 dotenv.config();
 
 const app = express();
-const prisma = new PrismaClient();
 
 // Middleware
 app.use(cors({
@@ -25,6 +32,10 @@ app.use(morgan('dev'));
 
 // Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/villes', villesRoutes);
+app.use('/api/reservations', reservationsRoutes);
+app.use('/api/disponibilites', disponibilitesRoutes);
+app.use('/api/sav-claims', savClaimsRoutes);
 
 // Test protected route
 app.get('/api/protected', verifyToken, (req, res) => {

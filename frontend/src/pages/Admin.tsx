@@ -5,18 +5,19 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar, Users, AlertCircle, BarChart3, Clock, CheckCircle, XCircle, Phone, Mail, MapPin } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Tables } from "@/integrations/supabase/types";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 
-type Reservation = Tables<"reservations">;
-type DemandesSAV = Tables<"demandes_sav">;
+// Import du service API et des types
+import { fetchReservations, updateReservationStatus, fetchSavClaims, updateSavStatus } from "@/services/api";
+import { Reservation, DemandeSAV } from "@/types/models";
+
+// Nous utilisons maintenant les types depuis models.ts
 
 const Admin = () => {
   const [reservations, setReservations] = useState<Reservation[]>([]);
-  const [demandesSAV, setDemandesSAV] = useState<DemandesSAV[]>([]);
+  const [demandesSAV, setDemandesSAV] = useState<DemandeSAV[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
@@ -26,22 +27,13 @@ const Admin = () => {
 
   const loadData = async () => {
     try {
-      // Charger les réservations
-      const { data: reservationsData, error: reservationsError } = await supabase
-        .from('reservations')
-        .select('*')
-        .order('created_at', { ascending: false });
+      // Charger les réservations avec notre service API
+      const reservationsData = await fetchReservations();
 
-      if (reservationsError) throw reservationsError;
+      // Charger les demandes SAV avec notre service API
+      const savData = await fetchSavClaims();
 
-      // Charger les demandes SAV
-      const { data: savData, error: savError } = await supabase
-        .from('demandes_sav')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (savError) throw savError;
-
+      // Mettre à jour les états
       setReservations(reservationsData || []);
       setDemandesSAV(savData || []);
     } catch (error) {
@@ -55,14 +47,10 @@ const Admin = () => {
     }
   };
 
-  const updateReservationStatus = async (id: string, newStatus: string) => {
+  const handleUpdateReservationStatus = async (id: string, newStatus: Reservation['statut']) => {
     try {
-      const { error } = await supabase
-        .from('reservations')
-        .update({ statut: newStatus })
-        .eq('id', id);
-
-      if (error) throw error;
+      // Utiliser le service API pour mettre à jour le statut
+      const updatedReservation = await updateReservationStatus(id, newStatus);
 
       setReservations(prev => 
         prev.map(r => r.id === id ? { ...r, statut: newStatus } : r)
@@ -81,14 +69,10 @@ const Admin = () => {
     }
   };
 
-  const updateSAVStatus = async (id: string, newStatus: string) => {
+  const handleUpdateSAVStatus = async (id: string, newStatus: DemandeSAV['statut']) => {
     try {
-      const { error } = await supabase
-        .from('demandes_sav')
-        .update({ statut: newStatus })
-        .eq('id', id);
-
-      if (error) throw error;
+      // Utiliser le service API pour mettre à jour le statut
+      const updatedSav = await updateSavStatus(id, newStatus);
 
       setDemandesSAV(prev => 
         prev.map(d => d.id === id ? { ...d, statut: newStatus } : d)
@@ -228,19 +212,30 @@ const Admin = () => {
                       </CardTitle>
                       <div className="flex items-center gap-2">
                         {getStatusBadge(reservation.statut)}
-                        <Select
-                          value={reservation.statut}
-                          onValueChange={(value) => updateReservationStatus(reservation.id, value)}
+                        <Button 
+                          size="sm" 
+                          variant={reservation.statut === 'en_attente' ? 'outline' : 'secondary'} 
+                          className="ml-1"
+                          onClick={() => handleUpdateReservationStatus(reservation.id, 'en_attente')}
                         >
-                          <SelectTrigger className="w-40">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="en_attente">En attente</SelectItem>
-                            <SelectItem value="confirme">Confirmé</SelectItem>
-                            <SelectItem value="termine">Terminé</SelectItem>
-                          </SelectContent>
-                        </Select>
+                          <Clock className="h-4 w-4 mr-1" /> En attente
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          variant={reservation.statut === 'confirme' ? 'outline' : 'secondary'}
+                          className="ml-1"
+                          onClick={() => handleUpdateReservationStatus(reservation.id, 'confirme')}
+                        >
+                          <CheckCircle className="h-4 w-4 mr-1" /> Confirmé
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          variant={reservation.statut === 'termine' ? 'outline' : 'secondary'}
+                          className="ml-1"
+                          onClick={() => handleUpdateReservationStatus(reservation.id, 'termine')}
+                        >
+                          <CheckCircle className="h-4 w-4 mr-1" /> Terminé
+                        </Button>
                       </div>
                     </div>
                     <CardDescription>
@@ -296,19 +291,30 @@ const Admin = () => {
                       </CardTitle>
                       <div className="flex items-center gap-2">
                         {getStatusBadge(demande.statut)}
-                        <Select
-                          value={demande.statut}
-                          onValueChange={(value) => updateSAVStatus(demande.id, value)}
+                        <Button 
+                          size="sm" 
+                          variant={demande.statut === 'nouveau' ? 'outline' : 'secondary'} 
+                          className="ml-1"
+                          onClick={() => handleUpdateSAVStatus(demande.id, 'nouveau')}
                         >
-                          <SelectTrigger className="w-40">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="nouveau">Nouveau</SelectItem>
-                            <SelectItem value="en_cours">En cours</SelectItem>
-                            <SelectItem value="resolu">Résolu</SelectItem>
-                          </SelectContent>
-                        </Select>
+                          <AlertCircle className="h-4 w-4 mr-1" /> Nouveau
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          variant={demande.statut === 'en_cours' ? 'outline' : 'secondary'}
+                          className="ml-1"
+                          onClick={() => handleUpdateSAVStatus(demande.id, 'en_cours')}
+                        >
+                          <Clock className="h-4 w-4 mr-1" /> En cours
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          variant={demande.statut === 'resolu' ? 'outline' : 'secondary'}
+                          className="ml-1"
+                          onClick={() => handleUpdateSAVStatus(demande.id, 'resolu')}
+                        >
+                          <CheckCircle className="h-4 w-4 mr-1" /> Résolu
+                        </Button>
                       </div>
                     </div>
                     <CardDescription>
